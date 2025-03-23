@@ -81,8 +81,7 @@ public class ModernAuthentication {
     }
 
     public String getMessage(String key) {
-        // Load messages from a configuration file or use default values
-        // This is a simplified example; you may want to use a proper configuration library
+        
         return "Default message for " + key;
     }
 
