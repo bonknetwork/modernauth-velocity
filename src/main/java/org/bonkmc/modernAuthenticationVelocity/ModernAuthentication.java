@@ -15,11 +15,16 @@ import ninja.leaping.configurate.yaml.YAMLConfigurationLoader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
+import java.io.OutputStream;
+import java.io.InputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.Map;
+import java.net.URL;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
 @Plugin(id = "modernauthentication", name = "ModernAuthentication", version = "1.0", authors = {"Pyro & Gabuzard"})
 public class ModernAuthentication {
@@ -35,8 +40,6 @@ public class ModernAuthentication {
     private final Map<String, String> messages = new HashMap<>();
     private AuthListener authListener;
 
-    private Object nLoginAPI; // Use Object to hold the nLogin API instance
-
     @Inject
     public ModernAuthentication(ProxyServer proxyServer, Logger logger, Path dataDirectory) {
         this.proxyServer = proxyServer;
@@ -49,14 +52,6 @@ public class ModernAuthentication {
         // Load configuration
         loadConfiguration();
 
-        // Load nLogin API dynamically
-        nLoginAPI = loadNLoginAPI();
-        if (nLoginAPI == null) {
-            logger.error("Failed to load nLogin API. Make sure nLogin.jar is in the plugins folder.");
-        } else {
-            logger.info("nLogin API loaded successfully!");
-        }
-
         // Initialize AuthListener
         authListener = new AuthListener(this, proxyServer);
         proxyServer.getEventManager().register(this, authListener);
@@ -65,11 +60,14 @@ public class ModernAuthentication {
         CommandManager commandManager = proxyServer.getCommandManager();
         commandManager.register("authreload", new ReloadCommand(this));
         commandManager.register("modernconfirm", new ModernConfirmCommand(this));
+
+        logger.info("ModernAuthentication has been initialized!");
     }
 
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
         // Optional cleanup
+        logger.info("ModernAuthentication has been disabled.");
     }
 
     public void loadConfiguration() {
@@ -144,39 +142,53 @@ public class ModernAuthentication {
         Files.write(configFile, defaultConfig.getBytes());
     }
 
-    private Object loadNLoginAPI() {
+    // Method to send authentication request to the backend
+    public boolean authenticatePlayer(String username, String token) {
         try {
-            // Locate the nLogin.jar file in the plugins folder
-            Path nLoginJar = Paths.get("plugins/nLogin.jar");
-            if (!Files.exists(nLoginJar)) {
-                logger.error("nLogin.jar not found in the plugins folder.");
-                return null;
+            // Create the URL for the authentication endpoint
+            URL url = new URL(backendUrl + ":" + backendPort + "/authenticate");
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", "application/json; utf-8");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setDoOutput(true);
+
+            // Create the JSON payload
+            JsonObject payload = new JsonObject();
+            payload.addProperty("username", username);
+            payload.addProperty("token", token);
+            payload.addProperty("accessCode", accessCode);
+            payload.addProperty("serverId", serverId);
+
+            // Send the request
+            try (OutputStream os = connection.getOutputStream()) {
+                byte[] input = new Gson().toJson(payload).getBytes("utf-8");
+                os.write(input, 0, input.length);
             }
 
-            // Create a URLClassLoader to load the nLogin.jar
-            URLClassLoader classLoader = new URLClassLoader(
-                new URL[] { nLoginJar.toUri().toURL() },
-                getClass().getClassLoader()
-            );
-
-            // Load the nLoginAPI class
-            Class<?> nLoginAPIClass = classLoader.loadClass("com.nickuc.login.api.nLoginAPI");
-
-            // Get the getApi() method to retrieve the API instance
-            Method getApiMethod = nLoginAPIClass.getMethod("getApi");
-
-            // Invoke the getApi() method to get the API instance
-            return getApiMethod.invoke(null);
+            // Get the response
+            int responseCode = connection.getResponseCode();
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(connection.getInputStream(), "utf-8"))) {
+                    StringBuilder response = new StringBuilder();
+                    String responseLine;
+                    while ((responseLine = br.readLine()) != null) {
+                        response.append(responseLine.trim());
+                    }
+                    JsonObject jsonResponse = new Gson().fromJson(response.toString(), JsonObject.class);
+                    return jsonResponse.get("success").getAsBoolean(); // Assuming the backend returns a "success" field
+                }
+            } else {
+                logger.error("Authentication request failed with response code: " + responseCode);
+                return false;
+            }
         } catch (Exception e) {
-            logger.error("Failed to load nLogin API:", e);
-            return null;
+            logger.error("Failed to authenticate player: " + username, e);
+            return false;
         }
     }
 
-    public Object getNLoginAPI() {
-        return nLoginAPI;
-    }
-
+    // Getters for configuration values
     public String getBackendUrl() {
         return backendUrl;
     }
