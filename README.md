@@ -22,37 +22,7 @@ Our system drastically streamlines account recovery and password management, eli
 
 ## **How It Works**
 
-ModernAuthentication integrates with a backend API to handle player authentication. Here's an overview of the process:
-
-1. **Player Joins**:
-   - When a player joins the Velocity proxy, the plugin checks if they are registered with the backend.
-   - If the player is not registered, they are prompted to switch to ModernAuth using a clickable message.
-
-2. **Switching to ModernAuth**:
-   - If the player clicks the confirmation message or types `/modernconfirm yes`, the plugin starts the authentication flow.
-   - The player is sent a link to complete the authentication process.
-
-3. **Authentication**:
-   - The player clicks the link to authenticate via the ModernAuth system.
-   - Once authenticated, the player is logged in automatically.
-
-4. **Fallback**:
-   - If the player chooses not to switch (`/modernconfirm no`), they can continue using their current login method.
-
----
-
-## **Installation**
-
-1. **Download the Plugin**:
-   - Download the latest `ModernAuthentication.jar` from the [releases page](#) (or build it yourself).
-
-2. **Install the Plugin**:
-   - Place the `ModernAuthentication.jar` file in your Velocity server's `plugins` folder.
-
-3. **Start the Server**:
-   - Start the Velocity server. The plugin will generate a `config.yml` file in the `plugins/ModernAuthentication` folder.
-
----
+No available yet
 
 ## **Configuration**
 
