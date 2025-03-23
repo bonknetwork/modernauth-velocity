@@ -15,6 +15,9 @@ import ninja.leaping.configurate.yaml.YAMLConfigurationLoader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -32,6 +35,8 @@ public class ModernAuthentication {
     private final Map<String, String> messages = new HashMap<>();
     private AuthListener authListener;
 
+    private Object nLoginAPI; // Use Object to hold the nLogin API instance
+
     @Inject
     public ModernAuthentication(ProxyServer proxyServer, Logger logger, Path dataDirectory) {
         this.proxyServer = proxyServer;
@@ -43,6 +48,14 @@ public class ModernAuthentication {
     public void onProxyInitialization(ProxyInitializeEvent event) {
         // Load configuration
         loadConfiguration();
+
+        // Load nLogin API dynamically
+        nLoginAPI = loadNLoginAPI();
+        if (nLoginAPI == null) {
+            logger.error("Failed to load nLogin API. Make sure nLogin.jar is in the plugins folder.");
+        } else {
+            logger.info("nLogin API loaded successfully!");
+        }
 
         // Initialize AuthListener
         authListener = new AuthListener(this, proxyServer);
@@ -129,6 +142,39 @@ public class ModernAuthentication {
           switchConfirmationHover: "Switch to ModernAuth"
         """;
         Files.write(configFile, defaultConfig.getBytes());
+    }
+
+    private Object loadNLoginAPI() {
+        try {
+            // Locate the nLogin.jar file in the plugins folder
+            Path nLoginJar = Paths.get("plugins/nLogin.jar");
+            if (!Files.exists(nLoginJar)) {
+                logger.error("nLogin.jar not found in the plugins folder.");
+                return null;
+            }
+
+            // Create a URLClassLoader to load the nLogin.jar
+            URLClassLoader classLoader = new URLClassLoader(
+                new URL[] { nLoginJar.toUri().toURL() },
+                getClass().getClassLoader()
+            );
+
+            // Load the nLoginAPI class
+            Class<?> nLoginAPIClass = classLoader.loadClass("com.nickuc.login.api.nLoginAPI");
+
+            // Get the getApi() method to retrieve the API instance
+            Method getApiMethod = nLoginAPIClass.getMethod("getApi");
+
+            // Invoke the getApi() method to get the API instance
+            return getApiMethod.invoke(null);
+        } catch (Exception e) {
+            logger.error("Failed to load nLogin API:", e);
+            return null;
+        }
+    }
+
+    public Object getNLoginAPI() {
+        return nLoginAPI;
     }
 
     public String getBackendUrl() {
