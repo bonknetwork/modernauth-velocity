@@ -27,9 +27,9 @@ public class ModernAuthentication {
 
     private String backendUrl;
     private int backendPort;
-    private String accessCode; // Access code is securely loaded from config
-    private String serverId;
-    private final Map<String, String> messages = new HashMap<>();
+    private String accessCode; // Access code for backend communication
+    private String serverId; // Server ID for backend communication
+    private final Map<String, String> messages = new HashMap<>(); // Loaded messages
     private AuthListener authListener;
 
     @Inject
@@ -51,7 +51,6 @@ public class ModernAuthentication {
         // Register commands
         CommandManager commandManager = proxyServer.getCommandManager();
         commandManager.register("authreload", new ReloadCommand(this));
-        commandManager.register("modernconfirm", new ModernConfirmCommand(this));
 
         logger.info("ModernAuthentication has been initialized!");
     }
@@ -62,6 +61,9 @@ public class ModernAuthentication {
         logger.info("ModernAuthentication has been disabled.");
     }
 
+    /**
+     * Loads the plugin's configuration from the config.yml file.
+     */
     public void loadConfiguration() {
         try {
             // Get the plugin's data directory
@@ -82,7 +84,7 @@ public class ModernAuthentication {
             // Read values from the configuration
             backendUrl = config.getNode("backendUrl").getString("https://auth.bonkmc.org");
             backendPort = config.getNode("backendPort").getInt(443);
-            accessCode = config.getNode("access-code").getString(""); // Access code is loaded here
+            accessCode = config.getNode("access-code").getString(""); // Access code for backend communication
             serverId = config.getNode("server-id").getString("server-id-here");
 
             // Load messages
@@ -97,6 +99,12 @@ public class ModernAuthentication {
         }
     }
 
+    /**
+     * Creates the default configuration file if it doesn't exist.
+     *
+     * @param configFile The path to the config file.
+     * @throws IOException If an I/O error occurs.
+     */
     private void createDefaultConfig(Path configFile) throws IOException {
         // Create the parent directory if it doesn't exist
         Files.createDirectories(configFile.getParent());
@@ -121,10 +129,10 @@ public class ModernAuthentication {
           confirmUsage: "§7------------------------------\\n§ePlease type /modernconfirm <yes|no>\\n§7------------------------------"
           noSwitch: "§7------------------------------\\n§aNo problem! You can continue using your current login method.\\n§7------------------------------"
           invalidOption: "§7------------------------------\\n§eInvalid option. Please type /modernconfirm <yes|no>\\n§7------------------------------"
-          authSuccess: ""
-          authSuccessAfterRegister: ""
-          authFailed: "§7------------------------------\\n§cAuthentication failed even after registration. Please contact a higher administrator.\\n§7------------------------------"
-          registrationFailed: "§7------------------------------\\n§cRegistration failed. Please contact an administrator. You have not been logged in.\\n§7------------------------------"
+          authSuccess: "§7------------------------------\\n§aAuthentication successful! Welcome to the server.\\n§7------------------------------"
+          authFailed: "§7------------------------------\\n§cAuthentication failed. Please check your password and try again.\\n§7------------------------------"
+          enterPassword: "§7------------------------------\\n§ePlease enter your password in chat to authenticate.\\n§7------------------------------"
+          registrationFailed: "§7------------------------------\\n§cRegistration failed. Please contact an administrator.\\n§7------------------------------"
           tokenCreationFailed: "§7------------------------------\\n§cError: Failed to initiate authentication. Please try again later.\\n§7------------------------------"
           passwordLoginDisabled: "§7------------------------------\\n§cPassword login is modified for this account.\\n§aClick here to login using ModernAuth.\\n§7------------------------------"
           passwordLoginDisabledHover: "Open the ModernAuth login page"
@@ -144,7 +152,7 @@ public class ModernAuthentication {
     }
 
     public String getAccessCode() {
-        return accessCode; // Access code is securely retrieved here
+        return accessCode;
     }
 
     public String getServerId() {
