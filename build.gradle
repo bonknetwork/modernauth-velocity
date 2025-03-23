@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'eclipse'
     id 'org.jetbrains.gradle.plugin.idea-ext' version '1.1.8'
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 group = 'org.bonkmc'
@@ -22,10 +23,17 @@ repositories {
 dependencies {
     compileOnly("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
     annotationProcessor("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
-    
-    // New Configuration dependency's. don't play with
-    implementation("org.spongepowered:configurate-yaml:4.1.2") // For YAML configuration
-    implementation("org.spongepowered:configurate-core:4.1.2") // Core library
+    implementation("org.spongepowered:configurate-yaml:4.1.2")
+    implementation("org.spongepowered:configurate-core:4.1.2")
+}
+
+shadowJar {
+    archiveClassifier.set('')
+    relocate('org.spongepowered.configurate', 'org.bonkmc.modernAuthentication.shaded.configurate')
+}
+
+tasks.build {
+    dependsOn shadowJar
 }
 
 def targetJavaVersion = 17
@@ -38,7 +46,6 @@ tasks.withType(JavaCompile).configureEach {
     options.release.set(targetJavaVersion)
 }
 
-// Task to generate velocity-plugin.json
 task generateVelocityPluginJson {
     doLast {
         def jsonContent = """
@@ -57,19 +64,15 @@ task generateVelocityPluginJson {
     }
 }
 
-// Ensure the task runs before the processResources task
 processResources.dependsOn generateVelocityPluginJson
 
-// Include the generated resources in the JAR
 sourceSets.main.output.dir("${buildDir}/generated/resources", builtBy: generateVelocityPluginJson)
 
-// Template generation (existing code)
 def templateSource = file('src/main/templates')
 def templateDest = layout.buildDirectory.dir('generated/sources/templates')
 def generateTemplates = tasks.register('generateTemplates', Copy) { task ->
     def props = ['version': project.version]
     task.inputs.properties props
-
     task.from templateSource
     task.into templateDest
     task.expand props
