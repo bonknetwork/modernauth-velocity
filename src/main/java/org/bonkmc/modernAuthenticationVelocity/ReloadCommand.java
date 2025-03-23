@@ -15,12 +15,17 @@ public class ReloadCommand implements SimpleCommand {
     @Override
     public void execute(Invocation invocation) {
         CommandSource source = invocation.source();
+
+        // Reload the plugin's configuration
         plugin.loadConfiguration();
+
+        // Send a success message to the command sender
         source.sendMessage(Component.text(plugin.getMessage("reloadSuccess")));
     }
 
     @Override
     public boolean hasPermission(Invocation invocation) {
-        return invocation.source().hasPermission("modernauth.reload"); // Adjust permissions as needed
+        // Check if the command sender has the required permission
+        return invocation.source().hasPermission("modernauth.reload");
     }
 }
