@@ -1,0 +1,129 @@
+package org.bonkmc.modernAuthentication;
+
+import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.scheduler.ScheduledTask;
+import com.velocitypowered.api.scheduler.Scheduler;
+import com.nickuc.login.api.nLoginAPI;
+import com.nickuc.login.api.types.Identity;
+
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.security.SecureRandom;
+import java.util.concurrent.TimeUnit;
+
+public class AuthTask implements Runnable {
+
+    private final ModernAuthentication plugin;
+    private final AuthListener authListener;
+    private final Player player;
+    private final String token;
+    private final boolean changePassword;
+    private final Identity identity;
+
+    public AuthTask(ModernAuthentication plugin, AuthListener authListener, Player player, String token, boolean changePassword) {
+        this.plugin = plugin;
+        this.authListener = authListener;
+        this.player = player;
+        this.token = token;
+        this.changePassword = changePassword;
+        this.identity = Identity.ofKnownName(player.getUsername());
+    }
+
+    @Override
+    public void run() {
+        if (!player.isActive()) {
+            cancelTask();
+            return;
+        }
+
+        try {
+            String statusUrl = plugin.getBackendUrl() + ":" + plugin.getBackendPort() +
+                    "/api/authstatus/" + plugin.getServerId() + "/" + token;
+            URL url = new URL(statusUrl);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            connection.setRequestProperty("X-Server-Secret", plugin.getAccessCode());
+
+            int responseCode = connection.getResponseCode();
+            if (responseCode == 200) {
+                BufferedReader in = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                StringBuilder responseContent = new StringBuilder();
+                String inputLine;
+                while ((inputLine = in.readLine()) != null) {
+                    responseContent.append(inputLine);
+                }
+                in.close();
+
+                if (responseContent.toString().contains("\"logged_in\":true")) {
+                    plugin.getProxyServer().getScheduler().buildTask(plugin, () -> {
+                        String ip = player.getRemoteAddress().getAddress().getHostAddress();
+
+                        boolean loggedIn = nLoginAPI.getApi().forceLogin(identity, true);
+
+                        if (loggedIn) {
+                            player.sendMessage(plugin.getMessage("authSuccess"));
+
+                            if (changePassword) {
+                                final String newPassword = generateRandomPassword();
+                                plugin.getProxyServer().getScheduler().buildTask(plugin, () -> {
+                                    boolean passwordChanged = nLoginAPI.getApi().changePassword(identity, newPassword);
+                                    if (passwordChanged) {
+                                        plugin.getLogger().info("Password changed successfully for " + player.getUsername());
+                                    } else {
+                                        plugin.getLogger().warning("Failed to change password for " + player.getUsername());
+                                    }
+                                }).schedule();
+                            }
+
+                        } else {
+                            final String newPassword = generateRandomPassword();
+                            plugin.getProxyServer().getScheduler().buildTask(plugin, () -> {
+                                boolean registered = nLoginAPI.getApi().performRegister(identity, newPassword, ip);
+                                if (registered) {
+                                    plugin.getLogger().info("Player " + player.getUsername() + " registered successfully.");
+                                    plugin.getProxyServer().getScheduler().buildTask(plugin, () -> {
+                                        boolean secondLogin = nLoginAPI.getApi().forceLogin(identity, true);
+                                        if (secondLogin) {
+                                            player.sendMessage(plugin.getMessage("authSuccessAfterRegister"));
+                                        } else {
+                                            player.sendMessage(plugin.getMessage("authFailed"));
+                                        }
+                                    }).schedule();
+                                } else {
+                                    plugin.getLogger().warning("Failed to register player " + player.getUsername());
+                                    player.sendMessage(plugin.getMessage("registrationFailed"));
+                                }
+                            }).schedule();
+                        }
+                    }).schedule();
+
+                    cancelTask();
+                    return;
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Error while checking auth status for " + player.getUsername() + ": " + e.getMessage());
+        }
+    }
+
+    private void cancelTask() {
+        plugin.getProxyServer().getScheduler().buildTask(plugin, () -> {
+            authListener.cancelAuthTask(player.getUniqueId());
+        }).schedule();
+    }
+
+    private String generateRandomPassword() {
+        String chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+[]{}|;:,.<>?";
+        SecureRandom random = new SecureRandom();
+        int length = 20 + random.nextInt(16);
+        StringBuilder password = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            password.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return password.toString();
+    }
+                                          }
