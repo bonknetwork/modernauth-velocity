@@ -25,18 +25,11 @@ repositories {
 }
 
 dependencies {
-    // Velocity API
     compileOnly("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
     annotationProcessor("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
-
-    // Configurate (for YAML configuration)
     implementation("org.spongepowered:configurate-yaml:4.1.2")
     implementation("org.spongepowered:configurate-core:4.1.2")
-
-    // Gson (for JSON handling)
     implementation("com.google.code.gson:gson:2.10.1")
-
-    // Logging (SLF4J)
     implementation("org.slf4j:slf4j-api:2.0.7")
 }
 
@@ -61,7 +54,6 @@ tasks.withType(JavaCompile).configureEach {
     options.release.set(targetJavaVersion)
 }
 
-// Generate velocity-plugin.json
 task generateVelocityPluginJson {
     doLast {
         def jsonContent = """
@@ -84,7 +76,6 @@ processResources.dependsOn generateVelocityPluginJson
 
 sourceSets.main.output.dir("${buildDir}/generated/resources", builtBy: generateVelocityPluginJson)
 
-// Template generation (if needed)
 def templateSource = file('src/main/templates')
 def templateDest = layout.buildDirectory.dir('generated/sources/templates')
 def generateTemplates = tasks.register('generateTemplates', Copy) { task ->
