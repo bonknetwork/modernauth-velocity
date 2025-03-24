@@ -1,25 +1,30 @@
 package org.bonkmc.modernAuthentication;
 
-import com.velocitypowered.api.plugin.Plugin;
-import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.event.Subscribe;
-import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
-import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
-import com.velocitypowered.api.command.CommandManager;
 import com.google.inject.Inject;
+import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
+import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.plugin.Plugin;
+import com.velocitypowered.api.plugin.annotation.DataDirectory;
+import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.command.CommandManager;
 import org.slf4j.Logger;
 
-import ninja.leaping.configurate.ConfigurationNode;
-import ninja.leaping.configurate.yaml.YAMLConfigurationLoader;
-
+import java.nio.file.Path;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
-@Plugin(id = "modernauthentication", name = "ModernAuthentication", version = "1.0", authors = {"Pyro & Gabuzard"})
-public class ModernAuthentication {
+@Plugin(
+        id = "modernauthentication",
+        name = "ModernAuthentication",
+        version = "1.0.0",
+        description = "A modern authentication plugin for Velocity",
+        authors = {"YourName"}
+)
+public final class ModernAuthentication {
 
     private final ProxyServer proxyServer;
     private final Logger logger;
@@ -27,13 +32,14 @@ public class ModernAuthentication {
 
     private String backendUrl;
     private int backendPort;
-    private String accessCode; // Access code for backend communication
-    private String serverId; // Server ID for backend communication
-    private final Map<String, String> messages = new HashMap<>(); // Loaded messages
+    private String accessCode;
+    private String serverId; // Loaded from config.
     private AuthListener authListener;
 
+    private nLoginAPI nLoginAPI; // nLogin API instance
+
     @Inject
-    public ModernAuthentication(ProxyServer proxyServer, Logger logger, Path dataDirectory) {
+    public ModernAuthentication(ProxyServer proxyServer, Logger logger, @DataDirectory Path dataDirectory) {
         this.proxyServer = proxyServer;
         this.logger = logger;
         this.dataDirectory = dataDirectory;
@@ -41,108 +47,126 @@ public class ModernAuthentication {
 
     @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
-        // Load configuration
-        loadConfiguration();
+        // Ensure the data directory exists
+        if (!Files.exists(dataDirectory)) {
+            try {
+                Files.createDirectories(dataDirectory);
+            } catch (IOException e) {
+                logger.error("Failed to create data directory", e);
+                return;
+            }
+        }
 
-        // Initialize AuthListener
+        // Load or create the config file
+        File configFile = new File(dataDirectory.toFile(), "config.yml");
+        if (!configFile.exists()) {
+            createDefaultConfig(configFile);
+        }
+
+        // Load configuration
+        loadConfiguration(configFile);
+
+        // Check if nLogin is available
+        if (!setupNLogin()) {
+            logger.error("nLogin not found. Disabling ModernAuthentication.");
+            return; // Disable the plugin if nLogin is not present
+        }
+
+        // Register listeners and commands
         authListener = new AuthListener(this, proxyServer);
         proxyServer.getEventManager().register(this, authListener);
 
-        // Register commands
         CommandManager commandManager = proxyServer.getCommandManager();
-        commandManager.register("authreload", new ReloadCommand(this));
+        commandManager.register(commandManager.metaBuilder("authreload").build(), new ReloadCommand(this));
+        commandManager.register(commandManager.metaBuilder("modernconfirm").build(), new ModernConfirmCommand(this));
 
-        logger.info("ModernAuthentication has been initialized!");
-    }
-
-    @Subscribe
-    public void onProxyShutdown(ProxyShutdownEvent event) {
-        // Optional cleanup
-        logger.info("ModernAuthentication has been disabled.");
+        logger.info("ModernAuthentication has been enabled!");
     }
 
     /**
-     * Loads the plugin's configuration from the config.yml file.
+     * Creates the default configuration file.
+     * @param configFile The configuration file to create.
      */
-    public void loadConfiguration() {
-        try {
-            // Get the plugin's data directory
-            Path configFile = dataDirectory.resolve("config.yml");
+    private void createDefaultConfig(File configFile) {
+        try (FileWriter writer = new FileWriter(configFile)) {
+            // Default configuration values
+            Map<String, Object> config = new HashMap<>();
+            config.put("backendUrl", "https://auth.bonkmc.org");
+            config.put("backendPort", 8080);
+            config.put("access-code", "your-access-code");
+            config.put("server-id", "bonk-network");
 
-            // Create the config file if it doesn't exist
-            if (!Files.exists(configFile)) {
-                createDefaultConfig(configFile);
-                logger.info("Default configuration file created!");
-            }
+            // Write the default configuration to the file
+            writer.write("backendUrl: " + config.get("backendUrl") + "\n");
+            writer.write("backendPort: " + config.get("backendPort") + "\n");
+            writer.write("access-code: " + config.get("access-code") + "\n");
+            writer.write("server-id: " + config.get("server-id") + "\n");
+            writer.write("\n");
+            writer.write("messages:\n");
+            writer.write("  passwordLoginDisabled: \"Please click here to log in.\"\n");
+            writer.write("  passwordLoginDisabledHover: \"Click to open the authentication page.\"\n");
+            writer.write("  switchConfirmation: \"Click here to switch to the new authentication system.\"\n");
+            writer.write("  switchConfirmationHover: \"Confirm your switch to the new system.\"\n");
+            writer.write("  tokenCreationFailed: \"Failed to create a token. Please try again.\"\n");
+            writer.write("  notPlayer: \"This command can only be used by players.\"\n");
+            writer.write("  confirmUsage: \"Usage: /modernconfirm <yes|no>\"\n");
+            writer.write("  noSwitch: \"You have chosen not to switch to the new authentication system.\"\n");
+            writer.write("  invalidOption: \"Invalid option. Please use 'yes' or 'no'.\"\n");
+            writer.write("  reloadSuccess: \"Configuration reloaded successfully!\"\n");
 
-            // Load the configuration
-            YAMLConfigurationLoader loader = YAMLConfigurationLoader.builder()
-                .setPath(configFile)
-                .build();
-            ConfigurationNode config = loader.load();
-
-            // Read values from the configuration
-            backendUrl = config.getNode("backendUrl").getString("https://auth.bonkmc.org");
-            backendPort = config.getNode("backendPort").getInt(443);
-            accessCode = config.getNode("access-code").getString(""); // Access code for backend communication
-            serverId = config.getNode("server-id").getString("server-id-here");
-
-            // Load messages
-            ConfigurationNode messagesNode = config.getNode("messages");
-            for (Map.Entry<Object, ? extends ConfigurationNode> entry : messagesNode.getChildrenMap().entrySet()) {
-                messages.put(entry.getKey().toString(), entry.getValue().getString());
-            }
-
-            logger.info("Configuration loaded successfully!");
-        } catch (Exception e) {
-            logger.error("Failed to load configuration", e);
+            logger.info("Created default configuration file.");
+        } catch (IOException e) {
+            logger.error("Failed to create default configuration file", e);
         }
     }
 
     /**
-     * Creates the default configuration file if it doesn't exist.
-     *
-     * @param configFile The path to the config file.
-     * @throws IOException If an I/O error occurs.
+     * Loads the configuration from the config file.
+     * @param configFile The configuration file.
      */
-    private void createDefaultConfig(Path configFile) throws IOException {
-        // Create the parent directory if it doesn't exist
-        Files.createDirectories(configFile.getParent());
+    private void loadConfiguration(File configFile) {
+        try {
+            // Read the configuration file
+            Map<String, Object> config = new HashMap<>();
+            for (String line : Files.readAllLines(configFile.toPath())) {
+                if (line.contains(":")) {
+                    String[] parts = line.split(":", 2);
+                    String key = parts[0].trim();
+                    String value = parts[1].trim();
+                    config.put(key, value);
+                }
+            }
 
-        // Write the default config to the file
-        String defaultConfig = """
-        # The URL of your authentication backend.
-        backendUrl: "https://auth.bonkmc.org"
+            // Load configuration values
+            backendUrl = (String) config.getOrDefault("backendUrl", "https://auth.bonkmc.org");
+            backendPort = Integer.parseInt((String) config.getOrDefault("backendPort", "8080"));
+            accessCode = (String) config.getOrDefault("access-code", "your-access-code");
+            serverId = (String) config.getOrDefault("server-id", "bonk-network");
 
-        # The port on which your backend is running.
-        backendPort: 443
-
-        # The access code used when communicating with the backend API.
-        access-code: "your_access_code_here"
-
-        # The public server ID used in the link sent to players.
-        server-id: "server-id-here"
-
-        messages:
-          reloadSuccess: "§7------------------------------\\n§aModernAuthentication configuration reloaded.\\n§7------------------------------"
-          notPlayer: "§7------------------------------\\nOnly players can use this command.\\n§7------------------------------"
-          confirmUsage: "§7------------------------------\\n§ePlease type /modernconfirm <yes|no>\\n§7------------------------------"
-          noSwitch: "§7------------------------------\\n§aNo problem! You can continue using your current login method.\\n§7------------------------------"
-          invalidOption: "§7------------------------------\\n§eInvalid option. Please type /modernconfirm <yes|no>\\n§7------------------------------"
-          authSuccess: "§7------------------------------\\n§aAuthentication successful! Welcome to the server.\\n§7------------------------------"
-          authFailed: "§7------------------------------\\n§cAuthentication failed. Please check your password and try again.\\n§7------------------------------"
-          enterPassword: "§7------------------------------\\n§ePlease enter your password in chat to authenticate.\\n§7------------------------------"
-          registrationFailed: "§7------------------------------\\n§cRegistration failed. Please contact an administrator.\\n§7------------------------------"
-          tokenCreationFailed: "§7------------------------------\\n§cError: Failed to initiate authentication. Please try again later.\\n§7------------------------------"
-          passwordLoginDisabled: "§7------------------------------\\n§cPassword login is modified for this account.\\n§aClick here to login using ModernAuth.\\n§7------------------------------"
-          passwordLoginDisabledHover: "Open the ModernAuth login page"
-          switchConfirmation: "§7------------------------------\\n§eClick here to switch to ModernAuth\\n§7------------------------------"
-          switchConfirmationHover: "Switch to ModernAuth"
-        """;
-        Files.write(configFile, defaultConfig.getBytes());
+            logger.info("Configuration loaded successfully.");
+        } catch (IOException e) {
+            logger.error("Failed to load configuration file", e);
+        }
     }
 
-    // Getters for configuration values
+    /**
+     * Attempts to set up the nLogin API.
+     * @return true if nLogin is available, false otherwise.
+     */
+    private boolean setupNLogin() {
+        try {
+            // Attempt to load the nLogin API class
+            Class<?> nLoginAPIClass = Class.forName("com.nickuc.login.api.nLoginAPI");
+            // Get the API instance using reflection
+            nLoginAPI = (nLoginAPI) nLoginAPIClass.getMethod("getApi").invoke(null);
+            logger.info("Successfully hooked into nLogin!");
+            return true;
+        } catch (Exception e) {
+            logger.error("Failed to hook into nLogin. Make sure nLogin is installed.", e);
+            return false;
+        }
+    }
+
     public String getBackendUrl() {
         return backendUrl;
     }
@@ -159,10 +183,6 @@ public class ModernAuthentication {
         return serverId;
     }
 
-    public String getMessage(String key) {
-        return messages.getOrDefault(key, "§cMessage not found: " + key);
-    }
-
     public AuthListener getAuthListener() {
         return authListener;
     }
@@ -173,5 +193,51 @@ public class ModernAuthentication {
 
     public Logger getLogger() {
         return logger;
+    }
+
+    public nLoginAPI getNLoginAPI() {
+        return nLoginAPI;
+    }
+
+    /**
+     * Reloads the configuration file.
+     */
+    public void reloadConfiguration() {
+        File configFile = new File(dataDirectory.toFile(), "config.yml");
+        loadConfiguration(configFile);
+    }
+
+    /**
+     * Gets a message from the configuration.
+     * @param key The message key.
+     * @return The message, or a default if not found.
+     */
+    public String getMessage(String key) {
+        // For simplicity, this example hardcodes messages.
+        // You should load these from your configuration file.
+        switch (key) {
+            case "passwordLoginDisabled":
+                return "Please click here to log in.";
+            case "passwordLoginDisabledHover":
+                return "Click to open the authentication page.";
+            case "switchConfirmation":
+                return "Click here to switch to the new authentication system.";
+            case "switchConfirmationHover":
+                return "Confirm your switch to the new system.";
+            case "tokenCreationFailed":
+                return "Failed to create a token. Please try again.";
+            case "notPlayer":
+                return "This command can only be used by players.";
+            case "confirmUsage":
+                return "Usage: /modernconfirm <yes|no>";
+            case "noSwitch":
+                return "You have chosen not to switch to the new authentication system.";
+            case "invalidOption":
+                return "Invalid option. Please use 'yes' or 'no'.";
+            case "reloadSuccess":
+                return "Configuration reloaded successfully!";
+            default:
+                return "Message not found.";
+        }
     }
 }
