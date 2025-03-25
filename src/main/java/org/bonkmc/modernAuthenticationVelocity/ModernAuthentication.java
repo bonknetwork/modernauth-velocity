@@ -22,7 +22,7 @@ import java.util.Map;
         name = "ModernAuthentication",
         version = "1.0.0",
         description = "A modern authentication plugin for Velocity",
-        authors = {"YourName"}
+        authors = {"Pyro & Gabuzard"}
 )
 public final class ModernAuthentication {
 
