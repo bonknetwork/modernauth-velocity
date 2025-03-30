@@ -1,4 +1,4 @@
-package org.bonkmc.modernAuthentication;
+package org.bonkmc.modernAuthenticationVelocity;
 
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
