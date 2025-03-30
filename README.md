@@ -101,5 +101,3 @@ For assistance, DM **@pyroedged** on Discord. Please include details about the i
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ---
-
-This README provides all the necessary information for users to install, configure, and use your **ModernAuthentication Velocity plugin**. Let me know if you need further adjustments! 😊
