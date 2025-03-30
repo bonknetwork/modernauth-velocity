@@ -1,4 +1,4 @@
-package org.bonkmc.modernAuthentication;
+package org.bonkmc.modernAuthenticationVelocity;
 
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;

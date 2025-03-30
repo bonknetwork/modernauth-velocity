@@ -1,4 +1,4 @@
-package org.bonkmc.modernAuthentication;
+package org.bonkmc.modernAuthenticationVelocity;
 
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
