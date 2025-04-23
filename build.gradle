@@ -2,7 +2,6 @@ plugins {
     id 'java'
     id 'eclipse'
     id 'org.jetbrains.gradle.plugin.idea-ext' version '1.1.8'
-    id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 group = 'org.bonkmc'
@@ -18,30 +17,11 @@ repositories {
         name = "sonatype"
         url = "https://oss.sonatype.org/content/groups/public/"
     }
-    maven {
-        name = "jitpack"
-        url = "https://jitpack.io"
-    }
 }
 
 dependencies {
     compileOnly("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
     annotationProcessor("com.velocitypowered:velocity-api:3.4.0-SNAPSHOT")
-    implementation("org.spongepowered:configurate-yaml:4.1.2")
-    implementation("org.spongepowered:configurate-core:4.1.2")
-    implementation("com.google.code.gson:gson:2.10.1")
-    implementation("org.slf4j:slf4j-api:2.0.7")
-}
-
-shadowJar {
-    archiveClassifier.set('')
-    relocate('org.spongepowered.configurate', 'org.bonkmc.modernAuthentication.shaded.configurate')
-    relocate('com.google.gson', 'org.bonkmc.modernAuthentication.shaded.gson')
-    relocate('org.slf4j', 'org.bonkmc.modernAuthentication.shaded.slf4j')
-}
-
-tasks.build {
-    dependsOn shadowJar
 }
 
 def targetJavaVersion = 17
@@ -54,33 +34,12 @@ tasks.withType(JavaCompile).configureEach {
     options.release.set(targetJavaVersion)
 }
 
-task generateVelocityPluginJson {
-    doLast {
-        def jsonContent = """
-        {
-            "id": "modernauthentication",
-            "name": "ModernAuthentication",
-            "version": "${project.version}",
-            "description": "A modern authentication plugin for Velocity.",
-            "authors": ["Pyro & Gabuzard"],
-            "dependencies": []
-        }
-        """
-        def outputFile = file("${buildDir}/generated/resources/velocity-plugin.json")
-        outputFile.parentFile.mkdirs()
-        outputFile.write(jsonContent)
-    }
-}
-
-processResources.dependsOn generateVelocityPluginJson
-
-sourceSets.main.output.dir("${buildDir}/generated/resources", builtBy: generateVelocityPluginJson)
-
 def templateSource = file('src/main/templates')
 def templateDest = layout.buildDirectory.dir('generated/sources/templates')
 def generateTemplates = tasks.register('generateTemplates', Copy) { task ->
     def props = ['version': project.version]
     task.inputs.properties props
+
     task.from templateSource
     task.into templateDest
     task.expand props
